@@ -145,11 +145,9 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 
 <dialog id="dlg">
   <div class="dlg">
-    <h3>Impostazioni</h3>
+    <h3>Backup e dati</h3>
     <p class="small">I dati restano solo su questo telefono (nel browser). Fai ogni tanto un backup.</p>
-    <div id="setForm"></div>
-    <h4>Backup</h4>
-    <button class="primary" id="shareBk" style="width:100%">Salva backup su Drive / condividi</button>
+        <button class="primary" id="shareBk" style="width:100%">Salva backup su Drive / condividi</button>
     <p class="small" id="lastBk"></p>
     <div class="row2">
       <button class="ghost" id="expCsv">Esporta CSV</button>
@@ -158,10 +156,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
     <div style="height:10px"></div>
     <button class="ghost" id="impBtn" style="width:100%">Ripristina da backup…</button>
     <input type="file" id="impFile" accept="application/json,.json" hidden>
-    <div class="row2" style="margin-top:18px">
-      <button class="primary" id="setSave">Salva impostazioni</button>
-      <button class="ghost" id="setClose">Chiudi</button>
-    </div>
+    <button class="ghost" id="setClose" style="width:100%;margin-top:18px">Chiudi</button>
     <p class="small" style="margin-top:14px">Questa app è uno strumento di autocontrollo e non sostituisce le indicazioni dello psichiatra. Con sintomi forti non proseguire la riduzione e contattalo.</p>
   </div>
 </dialog>
@@ -173,7 +168,7 @@ const KEY = "gocce.v1";
 const DEF = () => ({
   settings: {
     ALP: {name: "ALP", full: "Alprazolam", start: "2026-10-05", dose: 45, days: 240, step: 7},
-    LOR: {name: "LOR", full: "Lorazepam",  start: "2026-10-05", dose: 30, days: 240, step: 7}
+    LOR: {name: "LOR", full: "Lorazepam",  start: "2026-10-05", dose: 40, days: 240, step: 7}
   },
   logs: {ALP: {}, LOR: {}}
 });
@@ -185,7 +180,6 @@ function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "null");
     if (raw) for (const k of ["ALP", "LOR"]) {
-      Object.assign(d.settings[k], (raw.settings || {})[k] || {});
       d.logs[k] = (raw.logs || {})[k] || {};
     }
   } catch (e) {}
@@ -373,31 +367,10 @@ $("#hist").addEventListener("click", ev => {
 function openSettings() {
   const lb = lastBackup();
   $("#lastBk").textContent = lb ? "Ultimo backup: " + fmtLong(lb) : "Nessun backup ancora eseguito.";
-  $("#setForm").innerHTML = ["ALP", "LOR"].map(k => {
-    const p = S.settings[k];
-    return `<h4>${k} · ${esc(p.full)}</h4><div class="row2">
-      <div><label>Data di inizio</label><input type="date" id="s_${k}_start" value="${p.start}"></div>
-      <div><label>Dose iniziale (gocce)</label><input type="number" inputmode="numeric" id="s_${k}_dose" min="1" max="200" value="${p.dose}"></div>
-      <div><label>Durata totale (giorni)</label><input type="number" inputmode="numeric" id="s_${k}_days" min="21" max="730" value="${p.days}"></div>
-      <div><label>Giorni per step</label><input type="number" inputmode="numeric" id="s_${k}_step" min="1" max="60" value="${p.step}"></div></div>`;
-  }).join("");
   $("#dlg").showModal();
 }
 $("#btnSet").onclick = openSettings;
 $("#setClose").onclick = () => $("#dlg").close();
-$("#setSave").onclick = () => {
-  const nxt = {};
-  for (const k of ["ALP", "LOR"]) {
-    const v = f => $("#s_" + k + "_" + f).value;
-    const dose = parseInt(v("dose"), 10), days = parseInt(v("days"), 10), step = parseInt(v("step"), 10), start = v("start");
-    if (!start || !(dose >= 1) || !(step >= 1) || !(days >= step * 3)) { toast(k + ": valori non validi (durata almeno 3 step)"); return; }
-    nxt[k] = {start, dose, days, step};
-  }
-  for (const k of ["ALP", "LOR"]) Object.assign(S.settings[k], nxt[k]);
-  if (persist()) toast("Impostazioni salvate");
-  $("#dlg").close(); loadDraft(); render();
-};
-
 function download(name, text, type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], {type}));
