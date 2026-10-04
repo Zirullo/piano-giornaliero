@@ -147,12 +147,9 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
   <div class="dlg">
     <h3>Backup e dati</h3>
     <p class="small">I dati restano solo su questo telefono (nel browser). Fai ogni tanto un backup.</p>
-        <button class="primary" id="shareBk" style="width:100%">Backup: condividi o scarica il file</button>
-    <p class="small" id="lastBk"></p>
-    <div class="row2">
-      <button class="ghost" id="expCsv">Esporta CSV</button>
-      <button class="ghost" id="expJson">Scarica file</button>
-    </div>
+        <button class="primary" id="expJson" style="width:100%">Scarica backup</button>
+    <div style="height:10px"></div>
+    <button class="ghost" id="expCsv" style="width:100%">Esporta tabella (CSV)</button>
     <div style="height:10px"></div>
     <button class="ghost" id="impBtn" style="width:100%">Ripristina da backup…</button>
     <input type="file" id="impFile" accept=".json,.txt,application/json,text/plain" hidden>
@@ -263,12 +260,6 @@ function renderAlerts() {
       break;
     }
   }
-  const lb = lastBackup(), nLogs = Object.keys(S.logs.ALP).length + Object.keys(S.logs.LOR).length;
-  if (nLogs > 0) {
-    const ago = lb ? dayIdx(lb, today()) : null;
-    if (ago === null || ago >= 7)
-      a.push(`<div class="alert a-warn">${ago === null ? "Non hai ancora fatto un backup." : "Ultimo backup " + ago + " giorni fa."} Apri ⚙ → "Backup".</div>`);
-  }
   const last = addDays(today(), -1), n0 = dayIdx(p.start, last);
   let miss = 0;
   for (let t = 0; t <= Math.min(n0, p.days); t++) if (!L[addDays(p.start, t)]) miss++;
@@ -365,8 +356,6 @@ $("#hist").addEventListener("click", ev => {
 
 /* ---------- impostazioni e backup ---------- */
 function openSettings() {
-  const lb = lastBackup();
-  $("#lastBk").textContent = lb ? "Ultimo backup: " + fmtLong(lb) : "Nessun backup ancora eseguito.";
   $("#dlg").showModal();
 }
 $("#btnSet").onclick = openSettings;
@@ -377,25 +366,7 @@ function download(name, text, type) {
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-const LB = "gocce.lastBackup";
-const markBackup = () => { try { localStorage.setItem(LB, today()); } catch (e) {} };
-const lastBackup = () => { try { return localStorage.getItem(LB); } catch (e) { return null; } };
-$("#expJson").onclick = () => { download("gocce-backup-" + today() + ".json", JSON.stringify(S), "application/json"); markBackup(); render(); };
-$("#shareBk").onclick = async () => {
-  const name = "gocce-backup-" + today() + ".json", body = JSON.stringify(S);
-  for (const type of ["application/json", "text/plain"]) {
-    const file = new File([body], name, {type});
-    try {
-      if (!(navigator.canShare && navigator.canShare({files: [file]}))) continue;
-      await navigator.share({files: [file], title: "Backup piano gocce"});
-      markBackup(); toast("Backup condiviso"); render(); return;
-    } catch (e) {
-      if (e && e.name === "AbortError") return;
-    }
-  }
-  download(name, body, "application/json"); markBackup(); render();
-  toast("Condivisione non disponibile: file scaricato, caricalo su Drive");
-};
+$("#expJson").onclick = () => download("gocce-backup-" + today() + ".json", JSON.stringify(S), "application/json");
 $("#expCsv").onclick = () => {
   const q = s => '"' + String(s).replace(/"/g, '""') + '"';
   const rows = [["farmaco", "data", "giorno", "gocce_previste", "gocce_assunte", "scostamento", "sintomi", "nota"]];
@@ -422,6 +393,7 @@ $("#impFile").onchange = e => {
 
 /* ---------- avvio ---------- */
 loadDraft(); render();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost"))
   navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
