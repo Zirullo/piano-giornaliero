@@ -155,7 +155,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
     </div>
     <div style="height:10px"></div>
     <button class="ghost" id="impBtn" style="width:100%">Ripristina da backup…</button>
-    <input type="file" id="impFile" accept="application/json,.json" hidden>
+    <input type="file" id="impFile" accept=".json,.txt,application/json,text/plain" hidden>
     <button class="ghost" id="setClose" style="width:100%;margin-top:18px">Chiudi</button>
     <p class="small" style="margin-top:14px">Questa app è uno strumento di autocontrollo e non sostituisce le indicazioni dello psichiatra. Con sintomi forti non proseguire la riduzione e contattalo.</p>
   </div>
@@ -382,15 +382,19 @@ const markBackup = () => { try { localStorage.setItem(LB, today()); } catch (e) 
 const lastBackup = () => { try { return localStorage.getItem(LB); } catch (e) { return null; } };
 $("#expJson").onclick = () => { download("gocce-backup-" + today() + ".json", JSON.stringify(S), "application/json"); markBackup(); render(); };
 $("#shareBk").onclick = async () => {
-  const name = "gocce-backup-" + today() + ".json";
-  const file = new File([JSON.stringify(S)], name, {type: "application/json"});
-  try {
-    if (navigator.canShare && navigator.canShare({files: [file]})) {
+  const name = "gocce-backup-" + today() + ".json", body = JSON.stringify(S);
+  for (const type of ["application/json", "text/plain"]) {
+    const file = new File([body], name, {type});
+    try {
+      if (!(navigator.canShare && navigator.canShare({files: [file]}))) continue;
       await navigator.share({files: [file], title: "Backup piano gocce"});
       markBackup(); toast("Backup condiviso"); render(); return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
     }
-    download(name, JSON.stringify(S), "application/json"); markBackup(); toast("File scaricato: caricalo su Drive"); render();
-  } catch (e) { if (e && e.name !== "AbortError") toast("Condivisione non riuscita"); }
+  }
+  download(name, body, "application/json"); markBackup(); render();
+  toast("Condivisione non disponibile: file scaricato, caricalo su Drive");
 };
 $("#expCsv").onclick = () => {
   const q = s => '"' + String(s).replace(/"/g, '""') + '"';
