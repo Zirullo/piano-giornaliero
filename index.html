@@ -49,13 +49,18 @@ button{font:inherit;color:inherit;cursor:pointer}
 .stepper button:active{transform:scale(.97)}
 .stepper .val{height:72px;border-radius:16px;border:2px solid var(--line);text-align:center;font-size:40px;font-weight:700;width:100%;background:transparent;color:var(--ink)}
 .lbl{font-size:13px;color:var(--mute);margin:14px 0 6px}
-.chips{display:grid;grid-template-columns:repeat(11,1fr);gap:4px}
-.chips button{border:0;border-radius:10px;height:42px;background:var(--chip);font-weight:600}
-.chips button[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink)}
-.chips button.hi[aria-pressed="true"]{background:var(--bad);color:#fff}
-.legend2{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:4px}
+.doses{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.doses button{border:0;border-radius:12px;height:56px;background:var(--chip);font-size:22px;font-weight:700}
+.doses button:active{background:var(--brand);color:var(--brand-ink);transform:scale(.96)}
+.total{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:14px 0 4px}
+.total .n{font-size:40px;font-weight:700}
+.entries{list-style:none;margin:8px 0 0;padding:0}
+.entries li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.entries .t{width:56px;color:var(--mute);font-variant-numeric:tabular-nums}
+.entries .g{flex:1;font-size:18px;font-weight:700}
+.entries .g span{font-weight:400;font-size:13px;color:var(--mute)}
+.entries button{background:var(--chip);border:0;border-radius:10px;width:40px;height:40px;font-size:17px}
 input[type=text],input[type=number],input[type=date]{font:inherit;width:100%;padding:12px;border-radius:12px;border:2px solid var(--line);background:transparent;color:var(--ink)}
-.actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px}
 .primary{background:var(--brand);color:var(--brand-ink);border:0;border-radius:14px;height:56px;font-size:18px;font-weight:700}
 .ghost{background:var(--chip);border:0;border-radius:14px;height:56px;padding:0 16px}
 .status{display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600;margin-top:10px}
@@ -102,26 +107,27 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
   </div>
   <div class="plan"><span class="u">previste</span><span class="n" id="planN">0</span><span class="u">gocce</span></div>
 
-  <div class="lbl">Gocce assunte</div>
-  <div class="stepper">
-    <button id="minus" aria-label="Meno una goccia">−</button>
-    <input class="val" id="val" type="number" inputmode="numeric" min="0" max="200">
-    <button id="plus" aria-label="Più una goccia">+</button>
-  </div>
+  <div class="lbl">Tocca per aggiungere un'assunzione</div>
+  <div class="doses" id="doses"></div>
 
-  <div class="lbl">Sintomi (0 = nessuno, 10 = molto forti)</div>
-  <div class="chips" id="sym"></div>
-  <div class="legend2"><span>nessuno</span><span>molto forti</span></div>
-
-  <div class="lbl">Nota (facoltativa)</div>
-  <input type="text" id="note" maxlength="120" placeholder="es. poco sonno">
-
-  <div class="actions">
-    <button class="primary" id="save">Salva</button>
-    <button class="ghost" id="clear">Cancella</button>
-  </div>
+  <div class="total"><span class="u">totale</span><span class="n" id="totN">0</span><span class="u">gocce</span></div>
+  <ul class="entries" id="entries"></ul>
   <div id="status"></div>
 </section>
+
+<dialog id="edlg">
+  <div class="dlg">
+    <h3>Modifica assunzione</h3>
+    <div class="row2" style="margin-top:12px">
+      <div><label for="eG">Gocce</label><input type="number" id="eG" inputmode="numeric" min="1" max="15"></div>
+      <div><label for="eT">Ora</label><input type="time" id="eT"></div>
+    </div>
+    <div class="actions" style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px">
+      <button class="primary" id="eSave">Salva</button>
+      <button class="ghost" id="eCancel">Annulla</button>
+    </div>
+  </div>
+</dialog>
 
 <section class="card">
   <h2>Andamento</h2>
@@ -177,7 +183,12 @@ function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "null");
     if (raw) for (const k of ["ALP", "LOR"]) {
-      d.logs[k] = (raw.logs || {})[k] || {};
+      const L = (raw.logs || {})[k] || {};
+      for (const day in L) {
+        const o = L[day];
+        const e = Array.isArray(o.e) ? o.e : (o.d > 0 ? [{g: o.d, t: ""}] : []);
+        if (e.length) d.logs[k][day] = {d: e.reduce((a, x) => a + x.g, 0), e};
+      }
     }
   } catch (e) {}
   return d;
@@ -210,14 +221,9 @@ function plan(p, t) {
 }
 
 /* ---------- stato UI ---------- */
-let cur = "ALP", sel = today(), draft = {d: 0, s: null, n: ""};
+let cur = "ALP", sel = today(), editI = -1;
 const P = () => S.settings[cur];
 const LG = () => S.logs[cur];
-
-function loadDraft() {
-  const e = LG()[sel], p = P();
-  draft = e ? {d: e.d, s: e.s, n: e.n || ""} : {d: plan(p, dayIdx(p.start, sel)), s: null, n: ""};
-}
 
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("on");
@@ -235,15 +241,17 @@ function render() {
   $("#dSub").textContent = (sel === today() ? fmtLong(sel) + " · " : "") +
     (idx < 0 ? "piano non ancora iniziato" : idx > p.days ? "piano concluso" : "giorno " + idx + " di " + p.days);
   $("#planN").textContent = pl;
-  $("#val").value = draft.d;
-  $("#note").value = draft.n;
-  $("#sym").innerHTML = Array.from({length: 11}, (_, i) =>
-    `<button class="${i >= 7 ? "hi" : ""}" data-s="${i}" aria-pressed="${draft.s === i}">${i}</button>`).join("");
+  $("#doses").innerHTML = Array.from({length: 15}, (_, i) => `<button data-g="${i + 1}">${i + 1}</button>`).join("");
+  const ent = e ? e.e : [], tot = e ? e.d : 0;
+  $("#totN").textContent = tot;
+  $("#entries").innerHTML = ent.map((x, i) =>
+    `<li><span class="t">${x.t || "–:–"}</span><span class="g">${x.g} <span>${x.g === 1 ? "goccia" : "gocce"}</span></span>` +
+    `<button data-ed="${i}" aria-label="Modifica">✎</button><button data-del="${i}" aria-label="Elimina">✕</button></li>`).join("");
 
   let st = '<span class="status s-none">Non registrato</span>';
   if (e) {
     const dl = e.d - pl;
-    st = dl > 0 ? `<span class="status s-bad">Registrato · +${dl} sopra il piano</span>`
+    st = dl < 0 && sel === today() ? `<span class="status s-none">Ne restano ${-dl} per il piano</span>` : dl > 0 ? `<span class="status s-bad">Registrato · +${dl} sopra il piano</span>`
        : `<span class="status s-ok">Registrato · ${dl === 0 ? "in linea" : dl + " sotto il piano"}</span>`;
   }
   $("#status").innerHTML = st;
@@ -253,13 +261,6 @@ function render() {
 
 function renderAlerts() {
   const p = P(), L = LG(), a = [];
-  for (let k = 0; k < 7; k++) {
-    const d1 = addDays(today(), -k), d0 = addDays(d1, -1);
-    if (L[d1] && L[d0] && L[d1].s >= 7 && L[d0].s >= 7) {
-      a.push(`<div class="alert a-bad"><b>${cur}:</b> sintomi ≥ 7 per 2 giorni di fila. Resta allo step corrente e senti lo psichiatra.</div>`);
-      break;
-    }
-  }
   const last = addDays(today(), -1), n0 = dayIdx(p.start, last);
   let miss = 0;
   for (let t = 0; t <= Math.min(n0, p.days); t++) if (!L[addDays(p.start, t)]) miss++;
@@ -317,41 +318,52 @@ function renderHist() {
     const d = addDays(p.start, t), e = L[d], pl = plan(p, t);
     let dl = '<span class="pill s-none">–</span>';
     if (e) { const x = e.d - pl; dl = `<span class="pill ${x > 0 ? "s-bad" : "s-ok"}">${x > 0 ? "+" : ""}${x}</span>`; }
-    rows += `<tr data-d="${d}" class="${d === sel ? "sel" : ""}"><td>${fmtShort(d)}</td><td>${pl}</td><td><b>${e ? e.d : "–"}</b></td><td>${dl}</td><td>${e && e.s != null ? e.s : "–"}</td></tr>`;
+    rows += `<tr data-d="${d}" class="${d === sel ? "sel" : ""}"><td>${fmtShort(d)}</td><td>${pl}</td><td><b>${e ? e.d : "–"}</b></td><td>${dl}</td></tr>`;
   }
-  $("#hist").innerHTML = `<tr><th>Data</th><th>Prev.</th><th>Prese</th><th>Δ</th><th>Sint.</th></tr>` +
-    (rows || `<tr><td colspan="5" class="small">Il piano non è ancora iniziato.</td></tr>`);
+  $("#hist").innerHTML = `<tr><th>Data</th><th>Prev.</th><th>Prese</th><th>Δ</th></tr>` +
+    (rows || `<tr><td colspan="4" class="small">Il piano non è ancora iniziato.</td></tr>`);
 }
 
 /* ---------- eventi ---------- */
 $("#tabs").addEventListener("click", ev => {
   const b = ev.target.closest("[data-k]"); if (!b) return;
-  cur = b.dataset.k; loadDraft(); render();
+  cur = b.dataset.k; render();
 });
-function go(n) { sel = addDays(sel, n); loadDraft(); render(); }
+function go(n) { sel = addDays(sel, n); render(); }
 $("#prev").onclick = () => go(-1);
 $("#next").onclick = () => go(1);
-$("#minus").onclick = () => { draft.d = Math.max(0, (Number(draft.d) || 0) - 1); $("#val").value = draft.d; };
-$("#plus").onclick = () => { draft.d = Math.min(200, (Number(draft.d) || 0) + 1); $("#val").value = draft.d; };
-$("#val").oninput = e => { draft.d = Math.max(0, Math.min(200, parseInt(e.target.value, 10) || 0)); };
-$("#note").oninput = e => { draft.n = e.target.value; };
-$("#sym").addEventListener("click", ev => {
-  const b = ev.target.closest("[data-s]"); if (!b) return;
-  const v = Number(b.dataset.s); draft.s = draft.s === v ? null : v;
-  [...$("#sym").children].forEach(x => x.setAttribute("aria-pressed", String(Number(x.dataset.s) === draft.s)));
+const nowHM = () => { const n = new Date(); return String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"); };
+function commit(day) {
+  const e = LG()[day];
+  if (e) { e.e.sort((a, b) => (a.t || "").localeCompare(b.t || "")); e.d = e.e.reduce((a, x) => a + x.g, 0); if (!e.e.length) delete LG()[day]; }
+  persist(); render();
+}
+$("#doses").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-g]"); if (!b) return;
+  const g = Number(b.dataset.g), t = sel === today() ? nowHM() : "12:00";
+  (LG()[sel] = LG()[sel] || {d: 0, e: []}).e.push({g, t});
+  commit(sel); toast("+" + g + (sel === today() ? " alle " + t : ""));
 });
-$("#save").onclick = () => {
-  LG()[sel] = {d: Number(draft.d) || 0, s: draft.s, n: draft.n.trim()};
-  if (persist()) toast("Salvato"); render();
-};
-$("#clear").onclick = () => {
-  if (!LG()[sel]) { toast("Niente da cancellare"); return; }
-  if (!confirm("Cancellare la registrazione di questo giorno?")) return;
-  delete LG()[sel]; persist(); loadDraft(); render(); toast("Cancellato");
+$("#entries").addEventListener("click", ev => {
+  const ed = ev.target.closest("[data-ed]"), del = ev.target.closest("[data-del]");
+  if (ed) {
+    editI = Number(ed.dataset.ed); const x = LG()[sel].e[editI];
+    $("#eG").value = x.g; $("#eT").value = x.t; $("#edlg").showModal();
+  } else if (del) {
+    if (!confirm("Eliminare questa assunzione?")) return;
+    LG()[sel].e.splice(Number(del.dataset.del), 1); commit(sel); toast("Eliminata");
+  }
+});
+$("#eCancel").onclick = () => $("#edlg").close();
+$("#eSave").onclick = () => {
+  const g = parseInt($("#eG").value, 10);
+  if (!(g >= 1 && g <= 15)) { toast("Gocce da 1 a 15"); return; }
+  const x = LG()[sel].e[editI]; x.g = g; x.t = $("#eT").value || x.t;
+  $("#edlg").close(); commit(sel); toast("Salvato");
 };
 $("#hist").addEventListener("click", ev => {
   const r = ev.target.closest("[data-d]"); if (!r) return;
-  sel = r.dataset.d; loadDraft(); render(); window.scrollTo({top: 0, behavior: "smooth"});
+  sel = r.dataset.d; render(); window.scrollTo({top: 0, behavior: "smooth"});
 });
 
 /* ---------- impostazioni e backup ---------- */
@@ -369,12 +381,12 @@ function download(name, text, type) {
 $("#expJson").onclick = () => download("gocce-backup-" + today() + ".json", JSON.stringify(S), "application/json");
 $("#expCsv").onclick = () => {
   const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-  const rows = [["farmaco", "data", "giorno", "gocce_previste", "gocce_assunte", "scostamento", "sintomi", "nota"]];
+  const rows = [["farmaco", "data", "giorno", "gocce_previste", "gocce_assunte", "scostamento", "assunzioni"]];
   for (const k of ["ALP", "LOR"]) {
     const p = S.settings[k], L = S.logs[k];
     Object.keys(L).sort().forEach(d => {
       const t = dayIdx(p.start, d), pl = plan(p, t);
-      rows.push([k, d, t, pl, L[d].d, L[d].d - pl, L[d].s == null ? "" : L[d].s, L[d].n || ""]);
+      rows.push([k, d, t, pl, L[d].d, L[d].d - pl, L[d].e.map(x => x.t + " " + x.g).join(" | ")]);
     });
   }
   download("gocce-" + today() + ".csv", "﻿" + rows.map(r => r.map(q).join(";")).join("\r\n"), "text/csv");
@@ -386,13 +398,13 @@ $("#impFile").onchange = e => {
     const d = JSON.parse(t);
     if (!d.settings || !d.logs) throw 0;
     if (!confirm("Sostituire i dati attuali con quelli del backup?")) return;
-    localStorage.setItem(KEY, JSON.stringify(d)); S = load(); loadDraft(); render(); $("#dlg").close(); toast("Backup ripristinato");
+    localStorage.setItem(KEY, JSON.stringify(d)); S = load(); render(); $("#dlg").close(); toast("Backup ripristinato");
   }).catch(() => toast("File di backup non valido"));
   e.target.value = "";
 };
 
 /* ---------- avvio ---------- */
-loadDraft(); render();
+render();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost"))
   navigator.serviceWorker.register("sw.js").catch(() => {});
