@@ -262,6 +262,7 @@ function render() {
   $("#dSub").textContent = (sel === today() ? fmtLong(sel) + " · " : "") +
     (idx < 0 ? "piano non ancora iniziato" : idx > p.days ? "piano concluso" : "giorno " + idx + " di " + p.days);
   $("#goToday").hidden = sel === today();
+  $("#prev").disabled = sel <= P().start;
   $("#planN").textContent = pl;
   $("#doses").innerHTML = Array.from({length: 15}, (_, i) => `<button data-g="${i + 1}"${sel > today() ? " disabled" : ""}>${i + 1}</button>`).join("");
   const dn = $("#dayNote");
@@ -388,7 +389,7 @@ $("#tabs").addEventListener("click", ev => {
   const b = ev.target.closest("[data-k]"); if (!b) return;
   cur = b.dataset.k; render();
 });
-function go(n) { sel = addDays(sel, n); render(); }
+function go(n) { const d = addDays(sel, n); if (d < P().start) return; sel = d; render(); }
 $("#goToday").onclick = () => { sel = today(); render(); };
 $("#prev").onclick = () => go(-1);
 $("#next").onclick = () => go(1);
