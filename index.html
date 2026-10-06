@@ -372,7 +372,7 @@ function renderStats() {
 
 function renderHist() {
   const p = P(), L = LG();
-  const end = Math.min(dayIdx(p.start, today()), p.days);
+  const ti = dayIdx(p.start, today()), end = ti > p.days ? p.days : ti - 1;
   let rows = "";
   for (let t = end, c = 0; t >= 0 && c < 14; t--, c++) {
     const d = addDays(p.start, t), e = L[d], pl = plan(p, t);
