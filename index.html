@@ -35,6 +35,7 @@ h1{font-size:18px;margin:0}
 button{font:inherit;color:inherit;cursor:pointer}
 .icon-btn{background:var(--chip);border:0;border-radius:12px;width:44px;height:44px;font-size:20px}
 header .icon-btn{width:40px;height:40px}
+.ver{font-size:11px;font-weight:500;color:var(--mute);margin-left:6px;white-space:nowrap}
 .tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .tab{border:2px solid var(--line);background:var(--card);border-radius:14px;padding:10px 8px;display:flex;align-items:baseline;justify-content:center;gap:8px}
 .tab b{font-size:18px}.tab span{font-size:12px;color:var(--mute)}
@@ -110,7 +111,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 </head>
 <body>
 <header>
-  <h1>Piano di riduzione</h1>
+  <h1>Piano di riduzione <small class="ver">Gocce 1.1</small></h1>
   <button class="icon-btn" id="btnSet" aria-label="Impostazioni">⚙</button>
 </header>
 
@@ -192,7 +193,7 @@ const KEY = "gocce.v1";
 const DEF = () => ({
   settings: {
     ALP: {name: "ALP", full: "Alprazolam", start: "2026-10-05", dose: 45, days: 240, step: 7},
-    LOR: {name: "LOR", full: "Lorazepam",  start: "2026-10-05", dose: 60, days: 240, step: 7}
+    LOR: {name: "LOR", full: "Lorazepam",  start: "2026-10-05", dose: 70, days: 240, step: 7}
   },
   logs: {ALP: {}, LOR: {}}
 });
