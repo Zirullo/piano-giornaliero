@@ -97,6 +97,17 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row2 label{font-size:12px;color:var(--mute);display:block;margin-bottom:4px}
 .small{font-size:12px;color:var(--mute)}
+.pcard{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.pcard>b{font-size:15px}
+.pcard .row2{grid-template-columns:1fr 1fr}
+.pcard p.small{margin:8px 0 0}
+.pcard .err{color:var(--bad);font-weight:600}
+.mini{margin-top:8px}
+.kv{list-style:none;margin:6px 0 0;padding:0;font-size:14px}
+.kv li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line)}
+.kv li span{color:var(--mute)}
+.kv li b{font-variant-numeric:tabular-nums;text-align:right}
+.hdbtns{display:flex;gap:8px}
 .rem{position:sticky;top:0;z-index:5;display:flex;align-items:baseline;justify-content:center;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:16px;background:var(--okbg);color:var(--ok);box-shadow:0 2px 10px rgba(0,0,0,.12)}
 .rem.bad{background:var(--badbg);color:var(--bad)}.rem.eq{background:var(--chip);color:var(--ink)}
 .rem .n{font-size:44px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
@@ -111,8 +122,11 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 </head>
 <body>
 <header>
-  <h1>Piano di riduzione <small class="ver">Gocce 1.1</small></h1>
-  <button class="icon-btn" id="btnSet" aria-label="Impostazioni">⚙</button>
+  <h1>Piano di riduzione <small class="ver">Gocce 1.2</small></h1>
+  <div class="hdbtns">
+    <button class="icon-btn" id="btnPlan" aria-label="Piano e tendenza">📈</button>
+    <button class="icon-btn" id="btnSet" aria-label="Impostazioni">⚙</button>
+  </div>
 </header>
 
 <div class="tabs" id="tabs" role="tablist"></div>
@@ -185,6 +199,23 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
     <p class="small" style="margin-top:14px">Questa app è uno strumento di autocontrollo e non sostituisce le indicazioni dello psichiatra. Con sintomi forti non proseguire la riduzione e contattalo.</p>
   </div>
 </dialog>
+<dialog id="pdlg">
+  <div class="dlg">
+    <h3>Piano e tendenza</h3>
+    <p class="small">I parametri definiscono le curve. Cambiarli non tocca le registrazioni: cambiano solo le gocce previste. I due farmaci sono indipendenti e possono finire in date diverse.</p>
+    <div id="pForm"></div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:4px">
+      <button class="primary" id="pSave">Salva parametri</button>
+      <button class="ghost" id="pReset">Valori di partenza</button>
+    </div>
+    <h4>Tendenza reale</h4>
+    <div id="pTrend"></div>
+    <h4>Proposte di piano</h4>
+    <p class="small">Calcolate dai giorni già registrati, farmaco per farmaco. Non sono un consiglio medico: valutale con lo psichiatra.</p>
+    <div id="pProp"></div>
+    <button class="ghost" id="pClose" style="width:100%;margin-top:18px">Chiudi</button>
+  </div>
+</dialog>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -200,10 +231,28 @@ const DEF = () => ({
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+const LIM = {dose: [1, 120], days: [14, 2000], step: [1, 60]};
+/* autonoma: load() gira prima della sezione date */
+const isDate = v => {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number), x = new Date(y, m - 1, d);
+  return x.getFullYear() === y && x.getMonth() === m - 1 && x.getDate() === d;
+};
+const isNum = (v, f) => Number.isFinite(+v) && +v >= LIM[f][0] && +v <= LIM[f][1];
+/* copia nei default solo i campi validi: un backup o un localStorage sporco non rompe il piano */
+function mergeSettings(dst, src) {
+  for (const k of ["ALP", "LOR"]) {
+    const o = (src || {})[k]; if (!o || typeof o !== "object") continue;
+    if (isDate(o.start)) dst[k].start = o.start;
+    for (const f of ["dose", "days", "step"]) if (isNum(o[f], f)) dst[k][f] = Math.round(+o[f]);
+  }
+  return dst;
+}
 function load() {
   const d = DEF();
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (raw) mergeSettings(d.settings, raw.settings);
     if (raw) for (const k of ["ALP", "LOR"]) {
       const L = (raw.logs || {})[k] || {};
       for (const day in L) {
@@ -229,6 +278,7 @@ const dayIdx = (start, s) => Math.round((parse(s) - parse(start)) / 864e5);
 const fmtLong = s => parse(s).toLocaleDateString("it-IT", {weekday: "long", day: "numeric", month: "long"});
 const fmtShort = s => parse(s).toLocaleDateString("it-IT", {weekday: "short", day: "2-digit", month: "2-digit"});
 const fmtDM = s => parse(s).toLocaleDateString("it-IT", {day: "2-digit", month: "2-digit"});
+const fmtFull = s => parse(s).toLocaleDateString("it-IT", {day: "2-digit", month: "2-digit", year: "numeric"});
 const today = () => iso(new Date());
 
 /* ---------- piano: riduzione % costante per step, scalata giorno per giorno ---------- */
@@ -241,6 +291,15 @@ function plan(p, t) {
   const a = weekly(p, i, n), b = weekly(p, i + 1, n);
   return Math.round(a + (b - a) * (t % p.step) / p.step);
 }
+
+const nSteps = p => Math.floor(p.days / p.step);
+/* riduzione percentuale applicata a ogni step */
+const stepRate = p => 1 - Math.pow(1 / Math.max(p.dose, 1.0001), 1 / Math.max(nSteps(p) - 2, 1));
+/* primo giorno a 0 gocce */
+function endIdx(p) { for (let t = 0; t <= p.days; t++) if (plan(p, t) === 0) return t; return p.days; }
+const endDate = p => addDays(p.start, endIdx(p));
+const pct1 = x => (x * 100).toFixed(1).replace(".", ",") + "%";
+const sgn1 = x => (x > 0 ? "+" : x < 0 ? "\u2212" : "") + Math.abs(x).toFixed(1).replace(".", ",");
 
 /* ---------- stato UI ---------- */
 let cur = "ALP", sel = today(), editI = -1;
@@ -439,6 +498,203 @@ $("#hist").addEventListener("click", ev => {
   sel = r.dataset.d; render(); window.scrollTo({top: 0, behavior: "smooth"});
 });
 
+/* ---------- analisi della tendenza reale ---------- */
+/* giorni registrati e conclusi (oggi escluso: è in corso) */
+function sample(k, win) {
+  const p = S.settings[k], L = S.logs[k], lim = addDays(today(), -1);
+  const from = win ? addDays(today(), -win) : null, out = [];
+  for (const d in L) {
+    if (d > lim || (from && d < from)) continue;
+    const t = dayIdx(p.start, d); if (t < 0 || t > p.days) continue;
+    out.push({d, t, y: L[d].d});
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+/* regressione ai minimi quadrati su ln(gocce): ln(y) = a + b*t, b < 0 = discesa */
+function fit(pts) {
+  const q = pts.filter(x => x.y >= 1);
+  if (q.length < 3) return null;
+  const n = q.length, mt = q.reduce((s, x) => s + x.t, 0) / n, ml = q.reduce((s, x) => s + Math.log(x.y), 0) / n;
+  let sxy = 0, sxx = 0;
+  for (const x of q) { sxy += (x.t - mt) * (Math.log(x.y) - ml); sxx += (x.t - mt) * (x.t - mt); }
+  if (!sxx) return null;
+  const b = sxy / sxx, a = ml - b * mt;
+  return {a, b, n, t0: q[0].t, t1: q[q.length - 1].t, at: t => Math.exp(a + b * t)};
+}
+/* scostamento di un insieme di parametri dai giorni realmente registrati */
+function dev(q, pts) {
+  if (!pts.length) return null;
+  let s = 0, sa = 0, over = 0;
+  for (const x of pts) { const e = x.y - plan(q, x.t); s += e; sa += Math.abs(e); if (e > 0) over++; }
+  return {mean: s / pts.length, abs: sa / pts.length, over, n: pts.length};
+}
+/* A: i parametri della stessa famiglia di curve più vicini allo storico (inizio e step invariati) */
+function fitParams(k, pts) {
+  const p = S.settings[k];
+  let best = null;
+  for (let dose = LIM.dose[0]; dose <= LIM.dose[1]; dose++)
+    for (let ns = 4; ns <= 300; ns++) {
+      const q = {start: p.start, step: p.step, dose, days: ns * p.step};
+      let e = 0;
+      for (const x of pts) { const d = x.y - plan(q, x.t); e += d * d; }
+      if (!best || e < best.e) best = {e, q};
+    }
+  return best && best.q;
+}
+/* B: prosegue col ritmo reale - curva che segue il tasso misurato */
+function trendParams(k, f) {
+  const p = S.settings[k];
+  if (!f || f.b >= -1e-4) return null;
+  const dose = Math.round(Math.exp(f.a));
+  if (dose < LIM.dose[0]) return null;
+  const ns = Math.round(Math.log(Math.max(dose, 2)) / (-f.b * p.step)) + 2;
+  return {start: p.start, step: p.step, dose: Math.min(dose, LIM.dose[1]), days: Math.min(Math.max(ns, 4), 300) * p.step};
+}
+function miniChart(k, q) {
+  const p = S.settings[k], L = S.logs[k], W = 320, H = 92;
+  const N = Math.max(p.days, q ? q.days : 0);
+  let mx = Math.max(p.dose, q ? q.dose : 0);
+  for (const d in L) mx = Math.max(mx, L[d].d);
+  const cx = t => 3 + t / N * (W - 6), cy = v => H - 4 - v / mx * (H - 10);
+  let bars = "";
+  for (const d in L) {
+    const t = dayIdx(p.start, d); if (t < 0 || t > N) continue;
+    bars += `<rect x="${(cx(t) - 1).toFixed(1)}" y="${cy(L[d].d).toFixed(1)}" width="2" height="${Math.max(0, cy(0) - cy(L[d].d)).toFixed(1)}" fill="var(--mute)" opacity=".55"/>`;
+  }
+  const line = (r, col, dash) => {
+    let pts = [];
+    for (let t = 0; t <= N; t += Math.max(1, Math.round(N / 120))) pts.push(cx(t).toFixed(1) + "," + cy(plan(r, t)).toFixed(1));
+    return `<polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2"${dash ? ' stroke-dasharray="5 4"' : ""}/>`;
+  };
+  return `<svg class="mini" viewBox="0 0 ${W} ${H}" role="img" aria-label="Confronto curve ${k}">${bars}${line(p, "var(--brand)")}${q ? line(q, "var(--bad)", 1) : ""}</svg>`;
+}
+const dec1 = x => x.toFixed(1).replace(".", ",");
+function trendCard(k) {
+  const p = S.settings[k], all = sample(k), rec = sample(k, 14);
+  const dAll = dev(p, all), dRec = dev(p, rec), f = fit(all);
+  const rows = [["Giorni registrati e conclusi", all.length]];
+  if (dAll) rows.push(["Scostamento medio (tutto)", sgn1(dAll.mean) + " gocce/die"],
+                      ["Scostamento assoluto medio", dec1(dAll.abs)],
+                      ["Giorni sopra il piano", dAll.over + " su " + dAll.n]);
+  if (dRec) rows.push(["Scostamento medio (ultimi 14 gg)", sgn1(dRec.mean) + " gocce/die"]);
+  rows.push(["Ritmo del piano", "\u2212" + pct1(stepRate(p)) + " / " + p.step + " gg"]);
+  if (f && f.b < -1e-4) {
+    const rr = 1 - Math.exp(f.b * p.step);
+    const lvl = Math.max(1, f.at(f.t1));
+    const tEnd = f.t1 + Math.log(1 / lvl) / f.b;
+    rows.push(["Ritmo reale misurato", "\u2212" + pct1(rr) + " / " + p.step + " gg"],
+              ["Fine del piano", fmtFull(endDate(p))],
+              ["Fine al ritmo reale", tEnd > 20000 ? "oltre 50 anni" : fmtFull(addDays(p.start, Math.round(tEnd)))]);
+  } else {
+    rows.push(["Fine del piano", fmtFull(endDate(p))],
+              ["Ritmo reale misurato", all.length < 3 ? "dati insufficienti" : "nessuna discesa"]);
+  }
+  return `<div class="pcard"><b>${k} \u00b7 ${esc(p.full)}</b><ul class="kv">` +
+    rows.map(([l, v]) => `<li><span>${l}</span><b>${v}</b></li>`).join("") + `</ul></div>`;
+}
+function propCard(k, q, title, note, pts) {
+  if (!q) return `<div class="pcard"><b>${title}</b><p class="small">${note}</p></div>`;
+  const p = S.settings[k], d = dev(q, pts), d0 = dev(p, pts);
+  propCard.store[k + "|" + title] = q;
+  return `<div class="pcard"><b>${title}</b><p class="small">${note}</p><ul class="kv">` +
+    `<li><span>Gocce iniziali</span><b>${q.dose}</b></li>` +
+    `<li><span>Durata</span><b>${q.days} giorni</b></li>` +
+    `<li><span>Ritmo</span><b>\u2212${pct1(stepRate(q))} / ${q.step} gg</b></li>` +
+    `<li><span>Fine prevista</span><b>${fmtFull(endDate(q))}</b></li>` +
+    (d && d0 ? `<li><span>Scostamento assoluto medio</span><b>${dec1(d.abs)} (ora ${dec1(d0.abs)})</b></li>` : "") +
+    `</ul>${miniChart(k, q)}<div class="leg"><span><i style="background:#1f4e78"></i>piano attuale</span><span><i style="background:#c0392b"></i>proposta</span></div>` +
+    `<button class="ghost" style="width:100%;height:44px;margin-top:10px" data-prop="${esc(k + "|" + title)}">Applica a ${k}</button></div>`;
+}
+propCard.store = {};
+function renderProps() {
+  let h = "";
+  for (const k of ["ALP", "LOR"]) {
+    const all = sample(k), f = fit(all);
+    h += `<p class="lbl" style="margin:16px 0 6px"><b>${k} \u00b7 ${esc(S.settings[k].full)}</b></p>`;
+    if (all.length < 5) { h += `<div class="pcard"><p class="small">Servono almeno 5 giorni registrati e conclusi: ora sono ${all.length}.</p></div>`; continue; }
+    h += propCard(k, fitParams(k, all), "Più aderente allo storico",
+      "Stessa forma di curva, inizio e step invariati: gocce iniziali e durata scelte per avvicinarsi il più possibile a ciò che hai davvero preso.", all);
+    h += propCard(k, trendParams(k, f), "Prosegue col ritmo reale",
+      f && f.b < -1e-4 ? "Estende in avanti la discesa che stai davvero facendo: segue il ritmo misurato, quindi lo scostamento resta quasi nullo."
+        : "Non calcolabile: nello storico non c\u2019è una discesa misurabile.", all);
+  }
+  $("#pProp").innerHTML = h;
+}
+
+/* ---------- parametri delle curve ---------- */
+function formVals(k) {
+  const o = {full: S.settings[k].full, name: k, start: $("#f_" + k + "_start").value,
+    dose: $("#f_" + k + "_dose").value, days: $("#f_" + k + "_days").value, step: $("#f_" + k + "_step").value};
+  if (!isDate(o.start)) return {err: "data di inizio non valida"};
+  for (const f of ["dose", "days", "step"]) {
+    if (!isNum(o[f], f)) return {err: `${f === "dose" ? "gocce iniziali" : f === "days" ? "durata" : "giorni per step"}: da ${LIM[f][0]} a ${LIM[f][1]}`};
+    o[f] = Math.round(+o[f]);
+  }
+  if (o.days < o.step * 4) return {err: "la durata deve valere almeno 4 step"};
+  return o;
+}
+function planInfo(k) {
+  const o = formVals(k), el = $("#f_" + k + "_info");
+  if (o.err) { el.className = "small err"; el.textContent = o.err; return; }
+  el.className = "small";
+  const lost = Object.keys(S.logs[k]).filter(d => d < o.start).length;
+  el.textContent = `${nSteps(o)} step da ${o.step} giorni \u00b7 \u2212${pct1(stepRate(o))} per step \u00b7 0 gocce il ${fmtFull(endDate(o))}` +
+    (lost ? ` \u00b7 \u26a0 ${lost} ${lost === 1 ? "giorno registrato resterebbe" : "giorni registrati resterebbero"} prima dell\u2019inizio (i dati non vengono cancellati)` : "");
+}
+function renderPlanForm() {
+  $("#pForm").innerHTML = ["ALP", "LOR"].map(k => {
+    const p = S.settings[k];
+    return `<div class="pcard"><b>${k} \u00b7 ${esc(p.full)}</b>
+      <div class="row2" style="margin-top:10px;row-gap:10px">
+        <div><label for="f_${k}_start">Inizio</label><input type="date" id="f_${k}_start" value="${p.start}"></div>
+        <div><label for="f_${k}_dose">Gocce iniziali</label><input type="number" id="f_${k}_dose" inputmode="numeric" min="${LIM.dose[0]}" max="${LIM.dose[1]}" value="${p.dose}"></div>
+        <div><label for="f_${k}_days">Durata (giorni)</label><input type="number" id="f_${k}_days" inputmode="numeric" min="${LIM.days[0]}" max="${LIM.days[1]}" value="${p.days}"></div>
+        <div><label for="f_${k}_step">Giorni per step</label><input type="number" id="f_${k}_step" inputmode="numeric" min="${LIM.step[0]}" max="${LIM.step[1]}" value="${p.step}"></div>
+      </div><p class="small" id="f_${k}_info"></p></div>`;
+  }).join("");
+  for (const k of ["ALP", "LOR"]) {
+    for (const f of ["start", "dose", "days", "step"]) $("#f_" + k + "_" + f).oninput = () => planInfo(k);
+    planInfo(k);
+  }
+}
+function openPlan() {
+  renderPlanForm();
+  $("#pTrend").innerHTML = ["ALP", "LOR"].map(trendCard).join("");
+  renderProps();
+  if (!$("#pdlg").open) $("#pdlg").showModal();
+}
+$("#btnPlan").onclick = openPlan;
+$("#pClose").onclick = () => $("#pdlg").close();
+$("#pSave").onclick = () => {
+  const vals = {};
+  for (const k of ["ALP", "LOR"]) {
+    const o = formVals(k);
+    if (o.err) { toast(k + ": " + o.err); return; }
+    vals[k] = o;
+  }
+  const chg = ["ALP", "LOR"].filter(k => ["start", "dose", "days", "step"].some(f => vals[k][f] !== S.settings[k][f]));
+  if (!chg.length) { toast("Nessuna modifica"); return; }
+  if (!confirm("Salvare i nuovi parametri di " + chg.join(" e ") + "?\nLe registrazioni non vengono toccate.")) return;
+  for (const k of ["ALP", "LOR"]) S.settings[k] = vals[k];
+  if (!persist()) return;
+  openPlan(); render(); toast("Parametri aggiornati");
+};
+$("#pReset").onclick = () => {
+  if (!confirm("Riportare i parametri ai valori di partenza?\nLe registrazioni non vengono toccate.")) return;
+  S.settings = DEF().settings;
+  if (!persist()) return;
+  openPlan(); render(); toast("Parametri di partenza ripristinati");
+};
+$("#pProp").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-prop]"); if (!b) return;
+  const key = b.dataset.prop, q = propCard.store[key], k = key.split("|")[0];
+  if (!q) return;
+  if (!confirm(`Applicare a ${k}: ${q.dose} gocce iniziali, ${q.days} giorni, fine il ${fmtFull(endDate(q))}?\nLe registrazioni non vengono toccate.`)) return;
+  S.settings[k] = Object.assign({}, S.settings[k], {dose: q.dose, days: q.days, step: q.step, start: q.start});
+  if (!persist()) return;
+  openPlan(); render(); toast("Piano " + k + " aggiornato");
+});
+
 /* ---------- impostazioni e backup ---------- */
 function openSettings() {
   $("#dlg").showModal();
@@ -471,7 +727,8 @@ $("#impFile").onchange = e => {
     const d = JSON.parse(t);
     if (!d.settings || !d.logs) throw 0;
     if (!confirm("Sostituire i dati attuali con quelli del backup?")) return;
-    localStorage.setItem(KEY, JSON.stringify(d)); S = load(); render(); $("#dlg").close(); toast("Backup ripristinato");
+    localStorage.setItem(KEY, JSON.stringify({settings: mergeSettings(DEF().settings, d.settings), logs: d.logs}));
+    S = load(); render(); $("#dlg").close(); toast("Backup ripristinato");
   }).catch(() => toast("File di backup non valido"));
   e.target.value = "";
 };
